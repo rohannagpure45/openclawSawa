@@ -1,3 +1,79 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this repo is (read first)
+
+This repository holds **two distinct things**:
+
+1. **The Sawa bot — the actual project being built here.** A Telegram group-chat
+   **prediction-market discovery bot**, driven by OpenClaw, that reads the live Sawa
+   product's markets plus Kalshi and talks to a group chat. The build plan is the source
+   of truth: **[docs/SAWA_PHASE1_PLAN.md](docs/SAWA_PHASE1_PLAN.md)**.
+2. **gstack — the AI engineering toolkit this repo was cloned from** (`browse/`, `hosts/`,
+   `scripts/`, and the many `/plan-*`, `/ship`, `/review`, `/qa` skill dirs). It's reference
+   tooling, not the product. Its full development guide is everything below the
+   `# gstack development` heading and is unchanged.
+
+If a task is about the bot / Sawa / Kalshi / OpenClaw / the discovery CLI → follow the plan
+doc and the Sawa sections here. If it's about the toolkit itself → use the gstack guide below.
+
+## Sawa — critical context (load-bearing, not derivable from the code in this repo)
+
+- **Sawa is a LIVE product, not greenfield.** It runs on a Supabase Postgres project
+  (`vmuuxsjafmkcdrcxouot`, `https://vmuuxsjafmkcdrcxouot.supabase.co`) with ~313 real users.
+  The web app (Next.js + Prisma) is in a **separate repo, not here**. Schema is camelCase/cuid:
+  `Prediction`, `Option`, `Bet`, `Transaction`, `OddsSnapshot`, `User`, `League`, and
+  `WhatsAppInbound` (an existing inbound-messaging channel — the Telegram bot is a second one).
+- **It is deliberately VIRTUAL.** `PlatformSettings.platformMode='virtual'`, currency =
+  "Sawa coins", disclaimer "Virtual currency for entertainment only. No cash value." Never
+  reintroduce real money or real Kalshi *trading* — that contradicts the shipped,
+  regulatory-safe product. Kalshi is a real-world **data source** only.
+- **Money is integer "Sawa coins"** (`User.balance` default 100, `monthlyGrantAmount` 1000,
+  `maxBetAmount` 100) — NOT USD cents.
+- **Markets use dynamic odds** (`creatorLiquidityPct`, `OddsSnapshot.percentage` time-series,
+  `earlyBirdBonusWeight`), NOT flat parimutuel.
+
+## Sawa — invariants (must hold in any bot code)
+
+- **Read-only by construction:** Phase 1 is strictly read-only. The discovery CLI issues only
+  HTTP GET; there is no POST/PATCH/DELETE codepath anywhere. Pin it with a static test.
+- **No PII to chat:** query only market tables/columns; never read or surface `User` PII
+  (email/phone/password/googleId).
+- **Stub-create writes nothing** and must clearly say nothing was created. Real writes / the
+  order engine are a later phase that reuses the Sawa app's logic (its API or new bot
+  endpoints) — never re-implement the economy and never write the live DB directly.
+- **Supabase key:** the device uses the existing (write-capable) key **GET-only** as a
+  documented accepted risk; never log/echo it. A dedicated read-only role/grant is the
+  deferred hardening.
+
+## Sawa — runtime & commands
+
+- **Runtime:** Python **3.9**, **stdlib only** (no third-party deps; `from __future__ import
+  annotations`, no `X|Y` unions, no `match`). The bot package `sawa/` (config, http,
+  sawa_read, kalshi_read, discover, create_stub, analyze, cli) is built per the plan and not
+  yet present.
+- **Tests:** `python -m pytest tests/ -v`. Single test: `python -m pytest tests/test_discover.py::test_name -v`.
+- **CLI (read-only):** `python -m sawa.cli markets --venue sawa|kalshi|all [--search KW] [--limit N] --json`
+  · `... show --venue V (--id|--ticker) X` · `... create --question ... --outcomes "A,B"` (stub)
+  · `... suggest --messages -`.
+- **Env:** `SAWA_SUPABASE_URL`, `SAWA_SUPABASE_KEY` (existing key, GET-only), `SAWA_KALSHI_ENV=demo`.
+  Keep these in `~/.sawa/env` (chmod 600), never committed.
+- **Build order (crawl→walk→run):** CRAWL = Kalshi read + CLI + tests (no secrets) → WALK =
+  Supabase read + discover/merge + tests → RUN = OpenClaw `skills/sawa/SKILL.md` + stub + suggest.
+  Each stage is independently verifiable per the plan.
+- **OpenClaw deploy (device):** `pip3 install --user -e .`; allowlist the bin for `exec`
+  (`openclaw approvals allowlist add`); install `skills/sawa/SKILL.md` (substitute
+  `__SAWA_BIN__`); BotFather `/setcommands`; add the bot to the group.
+
+## Supabase MCP
+
+`.mcp.json` registers the Supabase MCP (read-only, project `vmuuxsjafmkcdrcxouot`). Use
+`mcp__supabase__*` tools (`list_tables`, `execute_sql` SELECTs) to inspect the live schema; it
+needs `claude /mcp` auth per machine.
+
+---
+
 # gstack development
 
 ## Commands
