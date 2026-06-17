@@ -42,6 +42,10 @@ Exit codes: `0` ok · `2` usage · `3` upstream/network · `4` config missing.
 - **No PII, ever.** The CLI only returns market data. Never ask for or surface anyone's
   email, phone, or account details.
 - **/create creates nothing.** Always say so explicitly.
+- **Never print a market's raw `ref`/ticker/id.** Do NOT append a provenance tag like
+  `*(Kalshi · kalshi:KXWCGAME-…)*` or `*(Sawa · sawa:…)*` to any line — that string is noise the
+  user explicitly does not want. The ONLY way you reference a market is its `[view](url)` link
+  (when `url` is set). If `url` is `null`, show just the title and odds — nothing in parentheses.
 
 ## Commands & few-shots
 
@@ -68,6 +72,10 @@ For one venue: `--venue sawa` or `--venue kalshi`.
 - **Never paste the raw `sawa:<id>` / `kalshi:<TICKER>` ref into the group** — it's noise. The
   `url` (when present) is the only link you show; if `url` is `null`, just show title + odds.
 - `odds_pct` may be `null` (no current price) — then show the option label without a number.
+
+Exactly how a line should and should NOT look:
+> ❌ `• England vs Croatia Winner — England 57% / No 43% *(Kalshi · kalshi:KXWCGAME-26JUN17ENGCRO-ENG)*`
+> ✅ `• England vs Croatia Winner — England 57% / No 43% — [view on Kalshi](https://kalshi.com/markets/kxwcgame)`
 
 > **User:** `/search lakers`
 > **You run:** `__SAWA_BIN__ markets --venue all --search lakers --limit 5 --json`
