@@ -74,6 +74,20 @@ def test_list_parses_and_picks_latest_odds(monkeypatch):
     assert market.options[1].odds_pct is None    # no snapshots
 
 
+def test_market_url_none_without_template(monkeypatch):
+    fake, _ = _capture([{"id": "p1", "title": "T", "Option": []}])
+    monkeypatch.setattr(sawa_read.http, "get_json", fake)
+    assert sawa_read.list_markets(CFG)[0].url is None  # CFG has no template
+
+
+def test_market_url_built_from_template(monkeypatch):
+    cfg = Config(supabase_url="https://db.example", supabase_key="k", kalshi_base="x",
+                 market_url_template="https://sawa.example/market/{id}")
+    fake, _ = _capture([{"id": "p1", "title": "T", "Option": []}])
+    monkeypatch.setattr(sawa_read.http, "get_json", fake)
+    assert sawa_read.list_markets(cfg)[0].url == "https://sawa.example/market/p1"
+
+
 def test_list_empty(monkeypatch):
     fake, _ = _capture([])
     monkeypatch.setattr(sawa_read.http, "get_json", fake)

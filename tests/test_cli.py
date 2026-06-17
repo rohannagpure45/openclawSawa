@@ -70,6 +70,16 @@ def test_show_kalshi_requires_ticker(monkeypatch, capsys):
     assert out["error"]["code"] == "usage"
 
 
+def test_warm_prefetches_indexes(monkeypatch, capsys):
+    monkeypatch.setattr("sawa.kalshi_index.get_series_index", lambda cfg: [{"ticker": "A"}])
+    monkeypatch.setattr("sawa.kalshi_events.get_events_index", lambda cfg: [{"event_ticker": "E1"}, {"event_ticker": "E2"}])
+    rc = cli.main(["warm", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is True
+    assert out["data"] == {"series": 1, "events": 2}
+
+
 def test_markets_human_output(monkeypatch, capsys):
     sample = [Market(venue="kalshi", ref="kalshi:T1", title="High temp", status="open")]
     monkeypatch.setattr("sawa.kalshi_read.list_markets", lambda cfg, **k: sample)

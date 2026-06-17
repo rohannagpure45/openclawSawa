@@ -26,6 +26,7 @@ class Market:
     options: List[Outcome] = field(default_factory=list)
     activity: Optional[int] = None
     description: Optional[str] = None           # detail-only (show); list views may omit
+    url: Optional[str] = None                   # tappable market-page link (None if unknown)
 
 
 def market_to_dict(market):
@@ -33,17 +34,36 @@ def market_to_dict(market):
     return asdict(market)
 
 
-def search(cfg, query=None, venues=("sawa", "kalshi"), limit=20):
-    """Fan out to the requested venue readers, merge, and cap to ``limit``.
+def _interleave(groups):
+    """Round-robin merge of per-venue result lists so neither venue starves the
+    other when the combined total exceeds ``limit`` (a small limit otherwise gets
+    filled entirely by whichever venue is concatenated first)."""
+    merged = []  # type: List[Market]
+    i = 0
+    while True:
+        took = False
+        for group in groups:
+            if i < len(group):
+                merged.append(group[i])
+                took = True
+        if not took:
+            break
+        i += 1
+    return merged
 
-    Each reader labels its own results (venue/ref), so merging is concatenation
-    in venue order followed by a hard cap.
+
+def search(cfg, query=None, venues=("sawa", "kalshi"), limit=20):
+    """Fan out to the requested venue readers, round-robin merge, cap to ``limit``.
+
+    Each reader labels its own results (venue/ref). Results are interleaved across
+    venues (not concatenated venue-by-venue) so a small ``limit`` shows a fair mix
+    rather than only the first venue's markets.
     """
-    results = []  # type: List[Market]
+    groups = []  # type: List[List[Market]]
     if "sawa" in venues:
         from . import sawa_read
-        results.extend(sawa_read.list_markets(cfg, search=query, limit=limit))
+        groups.append(sawa_read.list_markets(cfg, search=query, limit=limit))
     if "kalshi" in venues:
         from . import kalshi_read
-        results.extend(kalshi_read.list_markets(cfg, search=query, limit=limit))
-    return results[:limit]
+        groups.append(kalshi_read.list_markets(cfg, search=query, limit=limit))
+    return _interleave(groups)[:limit]

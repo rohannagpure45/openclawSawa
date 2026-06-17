@@ -55,6 +55,9 @@ def build_parser():
     suggest.add_argument("--limit", type=int, default=20)
     suggest.add_argument("--json", action="store_true")
 
+    warm = sub.add_parser("warm", help="prefetch the Kalshi series+event caches (read-only)")
+    warm.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -118,11 +121,25 @@ def _suggest(args, cfg):
     return analyze.suggest_payload(cfg, messages, limit=args.limit)
 
 
+def _warm(args, cfg):
+    """Prefetch the Kalshi series + event indexes into the on-disk cache.
+
+    Read-only and Kalshi-only (no Supabase). Run by the background cron so the
+    24h event cache stays warm and interactive proper-noun searches are fast.
+    """
+    from . import kalshi_events
+    from . import kalshi_index
+    series = kalshi_index.get_series_index(cfg) or []
+    events = kalshi_events.get_events_index(cfg) or []
+    return {"series": len(series), "events": len(events)}
+
+
 _DISPATCH = {
     "markets": _markets,
     "show": _show,
     "create": _create,
     "suggest": _suggest,
+    "warm": _warm,
 }
 
 

@@ -32,6 +32,18 @@ def test_require_supabase_ok_when_present():
     config.require_supabase(cfg)  # no raise
 
 
+def test_market_url_template_optional(monkeypatch):
+    monkeypatch.delenv("SAWA_MARKET_URL_TEMPLATE", raising=False)
+    monkeypatch.setenv("SAWA_KALSHI_ENV", "demo")
+    assert config.get_config(env_path=None).market_url_template == ""
+
+
+def test_market_url_template_parsed(monkeypatch):
+    monkeypatch.setenv("SAWA_MARKET_URL_TEMPLATE", "https://sawa.example/market/{id}")
+    monkeypatch.setenv("SAWA_KALSHI_ENV", "demo")
+    assert config.get_config(env_path=None).market_url_template == "https://sawa.example/market/{id}"
+
+
 def test_env_file_fills_missing_without_override(tmp_path, monkeypatch):
     env_file = tmp_path / "env"
     env_file.write_text(

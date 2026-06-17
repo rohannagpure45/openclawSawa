@@ -14,17 +14,24 @@ def _cache_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SAWA_CACHE_DIR", str(tmp_path / "c"))
 
 
-def _raw(ticker, title="", subtitle="", yes_sub_title="", last_price=60, volume=10, status="open"):
-    return {
+def _raw(ticker, title="", subtitle="", yes_sub_title="", last_price=60, volume=10,
+         status="open", event_ticker=""):
+    # Kalshi's live schema: prices are dollar-denominated strings (0.0000-1.0000)
+    # and volume is a fixed-point string; plain last_price/yes_bid/volume are gone.
+    raw = {
         "ticker": ticker,
         "title": title or ticker,
         "subtitle": subtitle,
         "yes_sub_title": yes_sub_title,
-        "last_price": last_price,
-        "volume": volume,
         "status": status,
         "close_time": "2026-07-01T00:00:00Z",
+        "volume_fp": str(volume),
     }
+    if last_price is not None:
+        raw["last_price_dollars"] = "%.4f" % (last_price / 100.0)
+    if event_ticker:
+        raw["event_ticker"] = event_ticker
+    return raw
 
 
 def _single(payload, captured):
@@ -35,10 +42,14 @@ def _single(payload, captured):
     return fake
 
 
-def _router(series=None, markets_by_series=None, snapshot=None, captured=None):
-    """Route /series vs /markets?series_ticker=… vs snapshot; record URLs."""
+def _router(series=None, markets_by_series=None, markets_by_event=None,
+            events=None, snapshot=None, captured=None):
+    """Route /series, /events, /markets?series_ticker=…, /markets?event_ticker=…,
+    and the bare snapshot; record URLs."""
     series = series or []
     markets_by_series = markets_by_series or {}
+    markets_by_event = markets_by_event or {}
+    events = events or []
     snapshot = snapshot or []
     cap = captured if captured is not None else []
 
@@ -46,9 +57,14 @@ def _router(series=None, markets_by_series=None, snapshot=None, captured=None):
         cap.append(url)
         if "/series" in url and "series_ticker=" not in url:
             return {"series": series}
+        if "/events" in url and "event_ticker=" not in url:
+            return {"events": events, "cursor": None}
         m = re.search(r"series_ticker=([^&]+)", url)
         if m:
             return {"markets": markets_by_series.get(m.group(1), [])}
+        m = re.search(r"event_ticker=([^&]+)", url)
+        if m:
+            return {"markets": markets_by_event.get(m.group(1), [])}
         return {"markets": snapshot}
 
     return fake
@@ -83,6 +99,39 @@ def test_explicit_series_outcomes_and_labels(monkeypatch):
     assert m.ref == "kalshi:ABC"
     assert [(o.label, o.odds_pct) for o in m.options] == [("Yes", 70.0), ("No", 30.0)]
     assert m.activity == 10
+
+
+def test_dollars_price_volume_and_url(monkeypatch):
+    captured = []
+    raw = {
+        "ticker": "KXMENWORLDCUP-26-PT",
+        "title": "Will Portugal win the 2026 Men's World Cup?",
+        "last_price_dollars": "0.5700",   # 57%
+        "volume_fp": "123456.78",
+        "status": "open",
+        "close_time": "2026-07-01T00:00:00Z",
+    }
+    monkeypatch.setattr(kalshi_read.http, "get_json", _single({"markets": [raw]}, captured))
+    m = kalshi_read.list_markets(CFG, series="KXMENWORLDCUP")[0]
+    assert [(o.label, o.odds_pct) for o in m.options] == [("Yes", 57.0), ("No", 43.0)]
+    assert m.activity == 123456
+    assert m.url == "https://kalshi.com/markets/kxmenworldcup"
+
+
+def test_bid_ask_midpoint_when_no_last_price(monkeypatch):
+    captured = []
+    raw = {
+        "ticker": "X-Y",
+        "title": "Q",
+        "yes_bid_dollars": "0.4000",
+        "yes_ask_dollars": "0.5000",  # midpoint 45%
+        "volume_fp": "0",
+        "status": "open",
+    }
+    monkeypatch.setattr(kalshi_read.http, "get_json", _single({"markets": [raw]}, captured))
+    m = kalshi_read.list_markets(CFG, series="X")[0]
+    assert m.options[0].odds_pct == 45.0
+    assert m.activity is None  # volume 0 -> None
 
 
 def test_explicit_series_empty(monkeypatch):
@@ -156,6 +205,58 @@ def test_search_category_narrows_series(monkeypatch):
     out = kalshi_read.list_markets(CFG, search="cup", category="Sports", limit=10)
     assert [m.ref for m in out] == ["kalshi:KXSPORT-1"]
     assert not any("series_ticker=KXPOL" in u for u in captured)  # politics series never fetched
+
+
+# --- event-index supplement: bare team names (the England/Croatia regression) ---
+
+def test_search_supplements_with_events_for_bare_team_names(monkeypatch):
+    captured = []
+    # "england" matches a Bank-of-England series; "croatia" matches NO series.
+    series = [{"ticker": "KXCBDECISIONENGLAND", "title": "Bank of England Decision",
+               "tags": [], "category": "Economics"}]
+    events = [
+        {"event_ticker": "KXWCTEAMH2H-26ENGESP", "title": "England vs Spain: Who Will Go Further",
+         "sub_title": "ENG vs ESP", "series_ticker": "KXWCTEAMH2H", "category": "Sports"},
+        {"event_ticker": "KXWCTEAMH2H-26CROURU", "title": "Croatia vs Uruguay: Who Will Go Further",
+         "sub_title": "CRO vs URU", "series_ticker": "KXWCTEAMH2H", "category": "Sports"},
+    ]
+    markets_by_series = {"KXCBDECISIONENGLAND": [
+        _raw("KXCBDECISIONENGLAND-C25", title="Will the Bank of England cut rates?")]}
+    markets_by_event = {
+        "KXWCTEAMH2H-26ENGESP": [_raw("KXWCTEAMH2H-26ENGESP-ENG",
+            title="Will England advance further than Spain?", yes_sub_title="England advances",
+            event_ticker="KXWCTEAMH2H-26ENGESP")],
+        "KXWCTEAMH2H-26CROURU": [_raw("KXWCTEAMH2H-26CROURU-CRO",
+            title="Will Croatia advance further than Uruguay?", yes_sub_title="Croatia advances",
+            event_ticker="KXWCTEAMH2H-26CROURU")],
+    }
+    monkeypatch.setattr(kalshi_read.http, "get_json", _router(
+        series=series, markets_by_series=markets_by_series,
+        events=events, markets_by_event=markets_by_event, captured=captured))
+
+    out = kalshi_read.list_markets(CFG, search="england croatia", limit=10)
+    refs = {m.ref for m in out}
+    # The fix: both World Cup team markets surface (croatia was unfindable before)...
+    assert "kalshi:KXWCTEAMH2H-26ENGESP-ENG" in refs
+    assert "kalshi:KXWCTEAMH2H-26CROURU-CRO" in refs
+    # ...and they outrank the Bank-of-England market (which only matches one token).
+    assert out[0].ref.startswith("kalshi:KXWCTEAMH2H")
+    assert out[1].ref.startswith("kalshi:KXWCTEAMH2H")
+    assert out[0].url == "https://kalshi.com/markets/kxwcteamh2h"
+
+
+def test_search_topic_word_returns_series_market(monkeypatch):
+    # A topic query still resolves via the series index; with no matching events the
+    # merged pool is just the series markets.
+    captured = []
+    series = [{"ticker": "KXMENWORLDCUP", "title": "Men's World Cup winner",
+               "tags": ["Soccer"], "category": "Sports"}]
+    markets = {"KXMENWORLDCUP": [_raw("KXMENWORLDCUP-26-PT",
+        title="Will Portugal win the 2026 Men's World Cup?", yes_sub_title="Portugal")]}
+    monkeypatch.setattr(kalshi_read.http, "get_json", _router(
+        series=series, markets_by_series=markets, captured=captured))
+    out = kalshi_read.list_markets(CFG, search="world cup", limit=5)
+    assert out and out[0].ref == "kalshi:KXMENWORLDCUP-26-PT"
 
 
 # --- get_market (show) -- unchanged ---

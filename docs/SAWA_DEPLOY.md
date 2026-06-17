@@ -89,10 +89,22 @@ cat > ~/.sawa/env <<'ENV'
 SAWA_SUPABASE_URL=https://vmuuxsjafmkcdrcxouot.supabase.co
 SAWA_SUPABASE_KEY=<paste the service_role key>
 SAWA_KALSHI_ENV=prod
+# Optional: tappable Sawa market-page links (the web app is a separate repo; its
+# domain isn't known here). Set this to enable [view] links on Sawa markets.
+#SAWA_MARKET_URL_TEMPLATE=https://<sawa-domain>/market/{id}
 ENV
 chmod 600 ~/.sawa/env
 ```
 `prod` matters — Kalshi **demo** returns no markets. Kalshi prod is public, read-only, no money.
+
+**Kalshi search (how discovery works).** Kalshi has no full-text search, so the CLI builds two
+cached indexes (`~/.sawa/cache`, refreshed via `cache.py`): the **series** index (`GET /series`,
+one call, ~11k series — matches topic words like *world cup*, *nba*) and the **event** index
+(`GET /events?status=open`, ~38 pages, ~7.6k events — matches team/player names like *england
+croatia*, which live only at the event level). Both are consulted on every keyword search and the
+results are ranked by query-token overlap. Cold-building the event index takes ~20–30s; the
+background recommender runs `sawa warm` so it stays warm (24h TTL). To warm by hand:
+`SAWA_KALSHI_ENV=prod sawa warm`.
 
 ### 3. Allowlist the bin + set exec to `full`
 ```bash
@@ -183,7 +195,8 @@ pipes them into `sawa suggest`:
 - `scripts/sawa_recent_messages.py` — last N human messages from
   `~/.openclaw/agents/main/sessions/<group-session>.jsonl` (text only, sender stripped; prints
   nothing on any error).
-- `scripts/sawa_recommend_input.sh` — runs `recent_messages | sawa suggest --messages - --json`.
+- `scripts/sawa_recommend_input.sh` — first runs `sawa warm` (best-effort, to keep the Kalshi
+  series/event caches warm), then `recent_messages | sawa suggest --messages - --json`.
 - The cron agent turn runs that one script, reasons over the JSON, and posts. It posts **nothing**
   if the CLI errors, there are no recent messages, or nothing is market-worthy (no spam, no errors).
 

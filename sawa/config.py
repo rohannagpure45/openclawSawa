@@ -19,7 +19,16 @@ KALSHI_BASES = {
 }
 
 # Keys we will source from the env file (allowlist; nothing else is read).
-_ENV_KEYS = ("SAWA_SUPABASE_URL", "SAWA_SUPABASE_KEY", "SAWA_KALSHI_ENV")
+# SAWA_MARKET_URL_TEMPLATE is an optional, non-secret template for building a
+# tappable Sawa market-page link, e.g. "https://<domain>/market/{id}". When unset,
+# Sawa markets simply carry no url (the Sawa web app lives in a separate repo and
+# its domain isn't known here).
+_ENV_KEYS = (
+    "SAWA_SUPABASE_URL",
+    "SAWA_SUPABASE_KEY",
+    "SAWA_KALSHI_ENV",
+    "SAWA_MARKET_URL_TEMPLATE",
+)
 
 DEFAULT_ENV_PATH = "~/.sawa/env"
 
@@ -33,6 +42,7 @@ class Config:
     supabase_url: str
     supabase_key: str
     kalshi_base: str
+    market_url_template: str = ""
 
 
 def _load_env_file(path):
@@ -76,6 +86,7 @@ def get_config(env_path=DEFAULT_ENV_PATH):
         supabase_url=(os.environ.get("SAWA_SUPABASE_URL") or "").strip(),
         supabase_key=(os.environ.get("SAWA_SUPABASE_KEY") or "").strip(),
         kalshi_base=KALSHI_BASES[kalshi_env],
+        market_url_template=(os.environ.get("SAWA_MARKET_URL_TEMPLATE") or "").strip(),
     )
 
 

@@ -46,25 +46,36 @@ Exit codes: `0` ok · `2` usage · `3` upstream/network · `4` config missing.
 ## Commands & few-shots
 
 ### `/markets` and `/search` — list / search markets
-Run (default venue is both):
+Run (default venue is both — always use `all` unless the user names one venue):
 ```
 __SAWA_BIN__ markets --venue all --search "<keywords>" --limit 5 --json
 ```
-For one venue: `--venue sawa` or `--venue kalshi`. Drop `--search` to list newest.
+For one venue: `--venue sawa` or `--venue kalshi`.
 
-> **Search tips:** Kalshi finds markets by **topic** — your keywords are matched against
-> market categories/competitions, not free text. Include the topic word (e.g. *world cup*,
-> *NBA*, *election*, *bitcoin*), not just a team name; for a team, add the competition
-> (*"Portugal world cup"*). Make **one** good `--venue all` search per request — don't fire
-> several variants back-to-back (Kalshi rate-limits bursts).
+> **`/search` needs a keyword.** If the user types `/search` with no topic, do **not** run the
+> CLI and do **not** dump random markets — reply asking what to search, e.g.
+> *"What market are you after? Try `/search world cup` or `/search bitcoin`."* Only `/markets`
+> with no keyword lists newest (drop `--search`), and even then keep it short.
+
+> **Search tips:** one good `--venue all` search per request — don't fire several variants
+> back-to-back (Kalshi rate-limits bursts). Kalshi matches both **topics** (e.g. *world cup*,
+> *NBA*, *bitcoin*) and **team/player names** (e.g. *england croatia*, *lakers*) — search the
+> words the user actually said; you don't need to add the competition yourself.
+
+**Rendering rules (important — keep replies clean):**
+- Show each market as **title — option% / option%**, and when the market's `url` is set, add a
+  markdown link `[view](<url>)`. Render the link text as *view on Kalshi* / *view on Sawa*.
+- **Never paste the raw `sawa:<id>` / `kalshi:<TICKER>` ref into the group** — it's noise. The
+  `url` (when present) is the only link you show; if `url` is `null`, just show title + odds.
+- `odds_pct` may be `null` (no current price) — then show the option label without a number.
 
 > **User:** `/search lakers`
 > **You run:** `__SAWA_BIN__ markets --venue all --search lakers --limit 5 --json`
-> **CLI data:** `[{"venue":"sawa","ref":"sawa:abc","title":"Lakers make playoffs?","options":[{"label":"Yes","odds_pct":58.0},{"label":"No","odds_pct":42.0}]}, {"venue":"kalshi","ref":"kalshi:KXNBA-LAL","title":"Lakers win title?","options":[{"label":"Yes","odds_pct":12.0},{"label":"No","odds_pct":88.0}]}]`
+> **CLI data:** `[{"venue":"sawa","ref":"sawa:abc","title":"Lakers make playoffs?","options":[{"label":"Yes","odds_pct":58.0},{"label":"No","odds_pct":42.0}],"url":null}, {"venue":"kalshi","ref":"kalshi:KXNBA","title":"Lakers win title?","options":[{"label":"Yes","odds_pct":12.0},{"label":"No","odds_pct":88.0}],"url":"https://kalshi.com/markets/kxnba"}]`
 > **You reply:**
 > 🏀 Markets matching *lakers*:
-> • **Lakers make playoffs?** — Yes 58% / No 42%  _(Sawa · `sawa:abc`)_
-> • **Lakers win title?** — Yes 12% / No 88%  _(Kalshi data · `kalshi:KXNBA-LAL`)_
+> • **Lakers make playoffs?** — Yes 58% / No 42%
+> • **Lakers win title?** — Yes 12% / No 88% — [view on Kalshi](https://kalshi.com/markets/kxnba)
 > _Sawa markets use virtual Sawa coins (no cash value)._
 
 ### `/show` — one market in detail
@@ -74,8 +85,9 @@ __SAWA_BIN__ show --venue kalshi --ticker <TICKER> --json
 ```
 > **User:** `/show sawa:abc`
 > **You run:** `__SAWA_BIN__ show --venue sawa --id abc --json`
-> **You reply:** title, each outcome with its current odds, and the deadline. If `data` is
-> `null`, say the market wasn't found (or isn't public).
+> **You reply:** title, each outcome with its current odds, the deadline, and a
+> `[view](<url>)` link when `url` is set (never the raw ref). If `data` is `null`, say the
+> market wasn't found (or isn't public).
 
 ### `/create` — preview only (STUB, nothing is created)
 ```
