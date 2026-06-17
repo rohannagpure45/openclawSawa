@@ -57,8 +57,10 @@ doc and the Sawa sections here. If it's about the toolkit itself → use the gst
 - **CLI (read-only):** `python -m sawa.cli markets --venue sawa|kalshi|all [--search KW] [--limit N] --json`
   · `... show --venue V (--id|--ticker) X` · `... create --question ... --outcomes "A,B"` (stub)
   · `... suggest --messages -`.
-- **Env:** `SAWA_SUPABASE_URL`, `SAWA_SUPABASE_KEY` (existing key, GET-only), `SAWA_KALSHI_ENV=demo`.
-  Keep these in `~/.sawa/env` (chmod 600), never committed.
+- **Env:** `SAWA_SUPABASE_URL`, `SAWA_SUPABASE_KEY` (existing key, GET-only), `SAWA_KALSHI_ENV=demo|prod`
+  (use `prod` for real Kalshi data; `demo` is empty). Keep these in `~/.sawa/env` (chmod 600), never
+  committed. Optional `SAWA_CACHE_DIR` (default `~/.sawa/cache`) holds the Kalshi series/market cache
+  (`kalshi_index`/`kalshi_read` via `cache.py`) — a local read cache, safe to delete.
 - **Build order (crawl→walk→run):** CRAWL = Kalshi read + CLI + tests (no secrets) → WALK =
   Supabase read + discover/merge + tests → RUN = OpenClaw `skills/sawa/SKILL.md` + stub + suggest.
   Each stage is independently verifiable per the plan.

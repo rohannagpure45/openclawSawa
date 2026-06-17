@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sawa"
+version = "0.1.0"
+description = "Sawa Phase-1 read-only prediction-market discovery CLI (Python 3.9, stdlib only)"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+sawa = "sawa.cli:main"
+
+[tool.setuptools]
+packages = ["sawa"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
