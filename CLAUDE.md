@@ -61,7 +61,10 @@ doc and the Sawa sections here. If it's about the toolkit itself → use the gst
   (use `prod` for real Kalshi data; `demo` is empty). Keep these in `~/.sawa/env` (chmod 600), never
   committed. Optional `SAWA_CACHE_DIR` (default `~/.sawa/cache`) holds the Kalshi series/event/market
   cache (`kalshi_index`/`kalshi_events`/`kalshi_read` via `cache.py`) — a local read cache, safe to
-  delete; warm it with `sawa warm`. Optional, non-secret `SAWA_MARKET_URL_TEMPLATE` (e.g.
+  delete; warm it with `sawa warm`. The series/event **indexes are stale-while-revalidate**:
+  interactive searches serve the on-disk copy even past TTL and never block on a cold rebuild (only
+  a truly-empty cache fetches inline); `sawa warm` (cron, `refresh=True`) refreshes off the critical
+  path. This is what keeps `/search` from timing out behind a multi-minute cold build. Optional, non-secret `SAWA_MARKET_URL_TEMPLATE` (e.g.
   `https://<domain>/market/{id}`) builds tappable Sawa market-page links; unset → Sawa markets carry
   no url (Kalshi links are always built from the ticker).
 - **Build order (crawl→walk→run):** CRAWL = Kalshi read + CLI + tests (no secrets) → WALK =

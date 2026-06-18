@@ -75,7 +75,23 @@ def test_get_series_index_uses_cache(monkeypatch):
     assert calls["n"] == 1  # second call served from disk cache
 
 
-def test_get_series_index_refetches_when_expired(monkeypatch):
+def test_get_series_index_serves_stale_when_expired(monkeypatch):
+    """Interactive reads serve a stale index rather than block on a cold rebuild."""
+    calls = {"n": 0}
+
+    def fake(url, headers=None, timeout=10):
+        calls["n"] += 1
+        return {"series": [{"ticker": "A", "title": "World Cup", "tags": [], "category": "Sports"}]}
+
+    monkeypatch.setattr(kalshi_index.http, "get_json", fake)
+    monkeypatch.setattr(kalshi_index, "SERIES_TTL_SECONDS", 0)  # always "expired"
+    kalshi_index.get_series_index(CFG)          # cold -> builds once
+    kalshi_index.get_series_index(CFG)          # expired but present -> stale, no rebuild
+    assert calls["n"] == 1
+
+
+def test_get_series_index_refresh_forces_rebuild(monkeypatch):
+    """sawa warm passes refresh=True to refetch off the interactive critical path."""
     calls = {"n": 0}
 
     def fake(url, headers=None, timeout=10):
@@ -83,7 +99,6 @@ def test_get_series_index_refetches_when_expired(monkeypatch):
         return {"series": []}
 
     monkeypatch.setattr(kalshi_index.http, "get_json", fake)
-    monkeypatch.setattr(kalshi_index, "SERIES_TTL_SECONDS", 0)  # always expired
-    kalshi_index.get_series_index(CFG)
-    kalshi_index.get_series_index(CFG)
-    assert calls["n"] == 2
+    kalshi_index.get_series_index(CFG, refresh=True)
+    kalshi_index.get_series_index(CFG, refresh=True)
+    assert calls["n"] == 2  # refresh always refetches and re-stores

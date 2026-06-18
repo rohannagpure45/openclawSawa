@@ -96,6 +96,27 @@ def test_events_index_uses_cache(monkeypatch):
     assert counters["events"] == 1  # second call served from disk cache
 
 
+def test_events_index_serves_stale_when_expired(monkeypatch):
+    """Interactive reads serve a stale index rather than re-page ~38 /events calls."""
+    counters = {}
+    pages = [{"events": [_ev("E1", "England vs Spain")], "cursor": None}]
+    monkeypatch.setattr(kalshi_events.http, "get_json", _router(pages, counters=counters))
+    monkeypatch.setattr(kalshi_events, "EVENTS_TTL_SECONDS", 0)  # always "expired"
+    kalshi_events.get_events_index(CFG)   # cold -> builds once
+    kalshi_events.get_events_index(CFG)   # expired but present -> stale, no rebuild
+    assert counters["events"] == 1
+
+
+def test_events_index_refresh_forces_rebuild(monkeypatch):
+    """sawa warm passes refresh=True to refetch off the interactive critical path."""
+    counters = {}
+    pages = [{"events": [_ev("E1", "England vs Spain")], "cursor": None}]
+    monkeypatch.setattr(kalshi_events.http, "get_json", _router(pages, counters=counters))
+    kalshi_events.get_events_index(CFG, refresh=True)
+    kalshi_events.get_events_index(CFG, refresh=True)
+    assert counters["events"] == 2  # refresh always re-pages and re-stores
+
+
 def test_find_events_series_enrichment(monkeypatch):
     # The query word "soccer" only matches via the event's SERIES tags, not its title.
     pages = [{"events": [_ev("E1", "Brazil vs Argentina", series_ticker="KXGAME")], "cursor": None}]

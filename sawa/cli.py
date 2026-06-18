@@ -129,8 +129,8 @@ def _warm(args, cfg):
     """
     from . import kalshi_events
     from . import kalshi_index
-    series = kalshi_index.get_series_index(cfg) or []
-    events = kalshi_events.get_events_index(cfg) or []
+    series = kalshi_index.get_series_index(cfg, refresh=True) or []
+    events = kalshi_events.get_events_index(cfg, refresh=True) or []
     return {"series": len(series), "events": len(events)}
 
 

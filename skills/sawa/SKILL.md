@@ -66,6 +66,12 @@ For one venue: `--venue sawa` or `--venue kalshi`.
 > *NBA*, *bitcoin*) and **team/player names** (e.g. *england croatia*, *lakers*) — search the
 > words the user actually said; you don't need to add the competition yourself.
 
+> **Don't kill the CLI early.** It normally replies in a few seconds. Do **not** wrap it in a
+> short `timeout` (e.g. `timeout 25s`) — on a cold cache the first call can take longer, and a
+> premature kill is exactly what makes the bot say "couldn't reach the markets" when the data
+> was actually fine. If you must bound it, use `timeout 120s`. If a call genuinely errors,
+> retry it **once**, then fall back to the human "couldn't reach" message.
+
 **Rendering rules (important — keep replies clean):**
 - Show each market as **title — option% / option%**, and when the market's `url` is set, add a
   markdown link `[view](<url>)`. Render the link text as *view on Kalshi* / *view on Sawa*.

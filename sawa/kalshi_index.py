@@ -71,9 +71,21 @@ def _fetch_series_index(cfg):
     return index
 
 
-def get_series_index(cfg):
-    """Return the cached series index, fetching+caching it on miss/expiry."""
-    return cache.load_or_fetch(
+def get_series_index(cfg, refresh=False):
+    """Return the series index.
+
+    Interactive callers (``refresh=False``) read stale-while-revalidate: a fresh
+    cache is used, else an expired on-disk copy is served WITHOUT a blocking
+    rebuild (only a truly-empty cache fetches inline). ``refresh=True`` forces a
+    live fetch and re-stores it -- used by ``sawa warm`` to refresh off the
+    interactive critical path. Building this index cold is slow (a large
+    ``GET /series``), so it must never block a user's search once warmed.
+    """
+    if refresh:
+        value = _fetch_series_index(cfg)
+        cache.store(SERIES_CACHE_KEY, value)
+        return value
+    return cache.load_or_fetch_stale(
         SERIES_CACHE_KEY, SERIES_TTL_SECONDS, lambda: _fetch_series_index(cfg)
     )
 

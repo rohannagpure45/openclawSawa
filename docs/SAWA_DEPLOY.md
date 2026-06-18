@@ -102,9 +102,30 @@ cached indexes (`~/.sawa/cache`, refreshed via `cache.py`): the **series** index
 one call, ~11k series — matches topic words like *world cup*, *nba*) and the **event** index
 (`GET /events?status=open`, ~38 pages, ~7.6k events — matches team/player names like *england
 croatia*, which live only at the event level). Both are consulted on every keyword search and the
-results are ranked by query-token overlap. Cold-building the event index takes ~20–30s; the
-background recommender runs `sawa warm` so it stays warm (24h TTL). To warm by hand:
-`SAWA_KALSHI_ENV=prod sawa warm`.
+results are ranked by query-token overlap.
+
+**Cold-build latency must never reach a user (stale-while-revalidate).** Cold-building the indexes
+is slow — the series fetch is a large response and the event index pages through ~38 `GET /events`
+calls; under Kalshi rate-limiting a full cold build has been observed at **3+ minutes**. The bot
+wraps CLI calls in a short `timeout`, so a blocking cold build inside a `/search` shows the user
+"couldn't reach the markets" even though the data is fine. To prevent that, interactive reads are
+**stale-while-revalidate**: `get_series_index` / `get_events_index` serve whatever copy is on disk
+(even past TTL) and never rebuild inline once any copy exists — only a truly-empty cache fetches
+inline (first run only). Warm interactive searches are ~1.5s; warm-index/expired-markets searches
+~4.5s. The actual refresh happens off the critical path via `sawa warm` (which calls the indexes
+with `refresh=True`):
+
+- The background recommender runs `sawa warm` (best-effort) before it posts. Because reads are
+  stale-while-revalidate, this twice-daily refresh is enough to keep `/search` fast — the index is
+  always served (fresh or stale), never rebuilt inline.
+- **Recommended (optional) hardening:** add a standalone cron so freshness doesn't depend on the
+  Telegram-bound recommender (which can error when Telegram is unreachable). It's Kalshi-only and
+  needs no secrets:
+  ```cron
+  0 */6 * * * SAWA_KALSHI_ENV=prod /Users/rohan/Library/Python/3.9/bin/sawa warm >/dev/null 2>&1
+  ```
+  Install with `crontab -e`. Not installed by default.
+- To warm by hand: `SAWA_KALSHI_ENV=prod sawa warm`.
 
 ### 3. Allowlist the bin + set exec to `full`
 ```bash

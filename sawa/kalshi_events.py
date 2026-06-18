@@ -60,9 +60,21 @@ def _fetch_events_index(cfg):
     return events
 
 
-def get_events_index(cfg):
-    """Return the cached open-events index, fetching+caching it on miss/expiry."""
-    return cache.load_or_fetch(
+def get_events_index(cfg, refresh=False):
+    """Return the open-events index.
+
+    Interactive callers (``refresh=False``) read stale-while-revalidate: a fresh
+    cache is used, else an expired on-disk copy is served WITHOUT a blocking
+    rebuild (only a truly-empty cache fetches inline). ``refresh=True`` forces a
+    live fetch and re-stores it -- used by ``sawa warm``. Building this index
+    cold pages through ~38 ``GET /events`` calls, so it must never block a
+    user's search once warmed.
+    """
+    if refresh:
+        value = _fetch_events_index(cfg)
+        cache.store(EVENTS_CACHE_KEY, value)
+        return value
+    return cache.load_or_fetch_stale(
         EVENTS_CACHE_KEY, EVENTS_TTL_SECONDS, lambda: _fetch_events_index(cfg)
     )
 

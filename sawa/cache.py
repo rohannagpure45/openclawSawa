@@ -30,17 +30,18 @@ def _path_for(key):
     return os.path.join(cache_dir(), safe + ".json")
 
 
-def load(key, ttl_seconds):
-    """Return the cached payload if present and younger than ttl, else None.
+def load(key, ttl_seconds, allow_stale=False):
+    """Return the cached payload if present (and younger than ttl), else None.
 
-    Any error (missing file, unreadable, malformed JSON, missing keys) yields
-    None so the caller treats it as a cache miss.
+    With ``allow_stale=True`` the age check is skipped: any readable entry is
+    returned regardless of age. Any error (missing file, unreadable, malformed
+    JSON, missing keys) yields None so the caller treats it as a cache miss.
     """
     try:
         with open(_path_for(key), "r", encoding="utf-8") as fh:
             envelope = json.load(fh)
         stored_at = float(envelope["stored_at"])
-        if (time.time() - stored_at) >= ttl_seconds:
+        if not allow_stale and (time.time() - stored_at) >= ttl_seconds:
             return None
         return envelope["payload"]
     except (OSError, ValueError, KeyError, TypeError):
@@ -78,6 +79,30 @@ def load_or_fetch(key, ttl_seconds, fetch_fn):
     cached = load(key, ttl_seconds)
     if cached is not None:
         return cached
+    value = fetch_fn()
+    store(key, value)
+    return value
+
+
+def load_or_fetch_stale(key, ttl_seconds, fetch_fn):
+    """Stale-while-revalidate read: keep the interactive path off the cold build.
+
+    - Fresh entry (younger than ttl) -> return it.
+    - Expired-but-present entry -> return the STALE payload WITHOUT fetching.
+      A background refresher (``sawa warm``) is responsible for refreshing it,
+      so an interactive caller never blocks on a slow rebuild once any copy
+      exists on disk.
+    - Nothing on disk at all -> fetch once, store best-effort, return it (the
+      only path that can block, and only until the first warm).
+
+    Errors raised by fetch_fn propagate only on the cold (no-copy) path.
+    """
+    fresh = load(key, ttl_seconds)
+    if fresh is not None:
+        return fresh
+    stale = load(key, ttl_seconds, allow_stale=True)
+    if stale is not None:
+        return stale
     value = fetch_fn()
     store(key, value)
     return value

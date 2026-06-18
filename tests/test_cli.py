@@ -71,13 +71,25 @@ def test_show_kalshi_requires_ticker(monkeypatch, capsys):
 
 
 def test_warm_prefetches_indexes(monkeypatch, capsys):
-    monkeypatch.setattr("sawa.kalshi_index.get_series_index", lambda cfg: [{"ticker": "A"}])
-    monkeypatch.setattr("sawa.kalshi_events.get_events_index", lambda cfg: [{"event_ticker": "E1"}, {"event_ticker": "E2"}])
+    seen = {}
+
+    def fake_series(cfg, refresh=False):
+        seen["series_refresh"] = refresh
+        return [{"ticker": "A"}]
+
+    def fake_events(cfg, refresh=False):
+        seen["events_refresh"] = refresh
+        return [{"event_ticker": "E1"}, {"event_ticker": "E2"}]
+
+    monkeypatch.setattr("sawa.kalshi_index.get_series_index", fake_series)
+    monkeypatch.setattr("sawa.kalshi_events.get_events_index", fake_events)
     rc = cli.main(["warm", "--json"])
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is True
     assert out["data"] == {"series": 1, "events": 2}
+    # warm must force a refresh, not piggyback on a (possibly stale) cache
+    assert seen == {"series_refresh": True, "events_refresh": True}
 
 
 def test_markets_human_output(monkeypatch, capsys):
