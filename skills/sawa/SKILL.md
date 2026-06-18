@@ -141,3 +141,10 @@ Same rules as `/suggest`, plus:
   admin, don't retry.
 - `error.code == "upstream"` (exit 3): a venue is unreachable/rate-limited — suggest retrying.
 - `error.code == "usage"` (exit 2): you called the CLI wrong — fix the flags and retry once.
+- **Always re-run on a re-ask.** If an earlier search failed and the user asks again (same or
+  similar query), you MUST run the CLI **fresh** for the new request. Never re-send a previous
+  "couldn't reach the markets" line from earlier in the thread without actually retrying the
+  command — a stale failure is not an answer to a new question.
+- **`EXIT:124` / no output is a self-inflicted timeout, not an upstream failure.** If you wrapped
+  the call in `timeout` and it got killed, the markets were likely fine — re-run **without** a
+  short timeout (or with `timeout 120s`) before telling the user you couldn't reach them.
